@@ -39,7 +39,6 @@ class CsvProcessor:
         self.processed_files = set()
 
     def _detect_dtype(self):
-        """Detect required dtype from model config"""
         config_path = os.path.join(self.model, "config.json")
         if os.path.exists(config_path):
             try:
@@ -59,52 +58,7 @@ class CsvProcessor:
                 print(f"Warning: Could not detect quantization: {e}")
         return None  # Let vLLM auto-detect
 
-    def _start_vllm_server_old(self):
-        """Start vLLM server as subprocess"""
-        print(f"🚀 Starting vLLM server with model: {self.model}")
-
-        # Check if model path exists
-        model_path = os.path.expanduser(self.model)
-        if not os.path.exists(model_path):
-            print(f"⚠️ Warning: Model path {model_path} does not exist!")
-            print("Please ensure the model is downloaded first.")
-
-        # vLLM server command
-        cmd = [
-            sys.executable, "-m", "vllm.entrypoints.openai.api_server",
-            "--model", self.model,
-            "--port", str(self.vllm_port),
-            "--max-num-seqs", "256",
-            "--max-model-len", "8192",
-            "--gpu-memory-utilization", "0.9",
-            "--dtype", "float16",  # Use float16 for better performance
-        ]
-
-        # Start the process
-        try:
-            self.vllm_process = subprocess.Popen(
-                cmd,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                text=True,
-                bufsize=1,
-                universal_newlines=True
-            )
-
-            # Register cleanup on exit
-            atexit.register(self._cleanup_server)
-
-            # Wait for server to be ready
-            self._wait_for_server()
-
-        except Exception as e:
-            print(f"❌ Failed to start vLLM server: {e}")
-            raise
-        import json
-        
-
     def _detect_quantization(self):
-        """Detect model quantization type from config"""
         config_path = os.path.join(self.model, "config.json")
         if os.path.exists(config_path):
             with open(config_path, 'r') as f:
@@ -121,46 +75,7 @@ class CsvProcessor:
                         return "float16"
         return "bfloat16"  # Default to bfloat16 for safety
 
-    def _wait_for_server_2(self, check_interval: int = 5):
-        """Wait for vLLM server to be ready with progress monitoring"""
-        print("Waiting for vLLM server to initialize and load model...")
-        print()
-        
-        start_time = time.time()
-        last_progress_time = start_time
-        
-        while time.time() - start_time < self.startup_timeout:
-            # Check if process died
-            if self.vllm_process and self.vllm_process.poll() is not None:
-                print(f"\n❌ vLLM server process died with exit code: {self.vllm_process.returncode}")
-                return False
-            
-            try:
-                # Try to connect to health endpoint
-                response = requests.get(f"http://localhost:{self.vllm_port}/health", timeout=15)
-                if response.status_code == 200:
-                    elapsed = int(time.time() - start_time)
-                    print(f"\n✅ vLLM server is ready after {elapsed} seconds!")
-                    return True
-            except:
-                pass
-            
-            # Show progress every 30 seconds
-            current_time = time.time()
-            if current_time - last_progress_time >= 30:
-                elapsed = int(current_time - start_time)
-                print(f"   Still loading... ({elapsed}s elapsed, timeout in {self.startup_timeout - elapsed}s)")
-                last_progress_time = current_time
-            
-            time.sleep(check_interval)
-        
-        elapsed = int(time.time() - start_time)
-        print(f"\n❌ vLLM server failed to start within {elapsed} seconds")
-        print("   Check the logs above for errors")
-        return False
-
     def _start_vllm_server(self, gpu_memory_util: float = 0.9, max_model_len: int = 4096):
-        """Start vLLM server as subprocess"""
         print(f"\n{'='*60}")
         print(f"Starting vLLM server")
         print(f"Model: {self.model}")
@@ -170,16 +85,13 @@ class CsvProcessor:
         print(f"Startup Timeout: {self.startup_timeout} seconds")
         print(f"{'='*60}\n")
 
-        # Check if model exists
         if not os.path.exists(self.model):
             raise FileNotFoundError(f"Model not found: {self.model}")
 
-        # Auto-detect dtype from model config
         dtype = self._detect_dtype()
         if dtype:
             print(f"Using dtype: {dtype}")
 
-        # Build command
         cmd = [
             sys.executable, "-m", "vllm.entrypoints.openai.api_server",
             "--model", self.model,
@@ -213,7 +125,6 @@ class CsvProcessor:
         "LD_LIBRARY_PATH": f"/usr/local/cuda-12.8/lib64:{env.get('LD_LIBRARY_PATH', '')}",
         })
 
-        # Add dtype if auto-detected
         if dtype:
             cmd.extend(["--dtype", dtype])
 
@@ -222,7 +133,6 @@ class CsvProcessor:
         #    print()
 
         try:
-            # Start process
             self.vllm_process = subprocess.Popen(
                 cmd,
                 stdout=subprocess.PIPE,
@@ -233,10 +143,8 @@ class CsvProcessor:
                 env=os.environ.copy()
             )
 
-            # Start log capture
             self._start_log_capture()
 
-            # Register cleanup
             atexit.register(self._cleanup_server)
 
             # Wait for server to be ready
@@ -249,9 +157,7 @@ class CsvProcessor:
             raise
 
     def _start_log_capture(self):
-        """Start thread to capture and display vLLM server logs"""
         def capture_logs():
-            """Background thread function to read server stderr"""
             if not self.vllm_process:
                 return
             
@@ -291,12 +197,10 @@ class CsvProcessor:
 
 
     def _wait_for_server(self, max_retries=400, retry_delay=2):
-        """Wait for vLLM server to be ready"""
         print("Waiting for vLLM server to start...")
 
         for i in range(max_retries):
             try:
-                # Try to connect to health endpoint
                 import requests
                 response = requests.get(f"http://localhost:{self.vllm_port}/health", timeout=5)
                 if response.status_code == 200:
@@ -305,11 +209,9 @@ class CsvProcessor:
             except:
                 pass
 
-            # Check if process is still running
             if self.vllm_process and self.vllm_process.poll() is not None:
-                # Process died, read error
                 stderr = self.vllm_process.stderr.read()
-                print(f"❌ vLLM server died with error: {stderr}")
+                print(f"vLLM server died with error: {stderr}")
                 return False
 
             time.sleep(retry_delay)
@@ -319,7 +221,6 @@ class CsvProcessor:
         return False
 
     def _cleanup_server(self):
-        """Clean up vLLM server process"""
         if self.vllm_process:
             print("\n Shutting down vLLM server...")
             self.vllm_process.terminate()

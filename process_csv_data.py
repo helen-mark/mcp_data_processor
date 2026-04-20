@@ -17,8 +17,7 @@ def process_tags_and_summary(config):
     
     INNs = pd.read_excel(INN_path)
     predicted_INNs = INNs[INNs["ИНН"].isin(predicted_list)]
-    print("predicted_INNS:", predicted_INNs)
-    
+
     def match_rct(sender: str) -> bool:
         def extract_address(text: str) -> str:
             #print(re.search(r'<([^>]+)>', text).group(1))
