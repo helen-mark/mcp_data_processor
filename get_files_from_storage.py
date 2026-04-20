@@ -5,11 +5,18 @@ import boto3
 from botocore.client import Config
 import os
 from datetime import datetime
+import yaml
+
 
 def download_files():
+    with open('credentials.yml', 'r') as file:
+        credentials = yaml.safe_load(file)
+
     BUCKET_NAME = "mcp-data"
     LOCAL_PATH = "data"
-    ENDPOINT_URL = "https://storage.yandexcloud.net"
+    ENDPOINT_URL = credentials.get('yc', {}).get('ENDPOINT_URL')
+    AWS_ACCESS_KEY_ID=credentials.get('yc', {}).get('AWS_ACCESS_KEY_ID')
+    AWS_SECRET_ACCESS_KEY=credentials.get('yc', {}).get('AWS_SECRET_ACCESS_KEY')
 
     session = boto3.session.Session()
     s3 = session.client(

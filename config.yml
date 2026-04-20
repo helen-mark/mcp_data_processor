@@ -7,6 +7,9 @@ folders:
     csv_mail: "csv_mail"
     mail_filename: "mail.csv"
     saved_results: "saved_results"
+    ai_rct: "ai_rct"
+    predictions_filename: "active_group_predict.xlsx"
+    INN_filename: "INN_and_email.xlsx"
     logs: "logs"
 
 llm_model: "gpt-oss:120b"
