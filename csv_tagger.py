@@ -1,21 +1,26 @@
-import json
 import atexit
-import ollama
-import pandas as pd
-import re
-from typing import Optional, Dict, Any
-import time
-import yaml
-import openai
+from enum import Enum
+import json
 import os
+import re
 import subprocess
 import sys
 import threading
-#from tagging_agent import TaggingAgent
+import time
+from typing import Optional, Dict, Any
 
+import ollama
+import openai
+import yaml
+
+import pandas as pd
+
+class DataType(Enum):
+    MAIL = "mail"
+    CALLS = "calls"
 
 class CsvProcessor:
-    def __init__(self, model: str, output_csv_path: str, batch_size: int = 100, mail: bool = False, config_path: str = 'config.yml'):
+    def __init__(self, model: str, output_csv_path: str, batch_size: int = 100, data_type: DataType = DataType.MAIL, config_path: str = 'config.yml'):
         with open(config_path, 'r', encoding='utf-8') as file:
             config = yaml.safe_load(file)
         self.model = model  #'opt/models/openai-gpt-oss-120b/'
@@ -27,7 +32,7 @@ class CsvProcessor:
         self.output_csv_path = output_csv_path
         self.batch_size = batch_size
         self.tags_list = config.get('tags_list', [])
-        self.mail = mail
+        self.data_type = data_type
         self.is_local = False
         self.client = ollama.Client(headers={"Connection": "keep-alive"})
         #self.client = openai.OpenAI(
@@ -396,7 +401,7 @@ class CsvProcessor:
             print('Getting response ...')
             response = self.client.generate(
                 model=self.model,
-                prompt=prompt_mail if self.mail else prompt,
+                prompt=prompt_mail if self.data_type == DataType.MAIL else prompt,
                 keep_alive=-1,
                 options={
                     'temperature': 0.3,
@@ -468,10 +473,8 @@ class CsvProcessor:
                     else:
                         print(f"Модель придумала тег '{tag}', игнорирую")
 
-                if self.mail:
-                    valid_selected.append('mail')
-                else:
-                    valid_selected.append('call')
+                valid_selected.append(DataType.value)
+
 
                 result['result'] = valid_selected
 

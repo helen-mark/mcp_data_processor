@@ -4,11 +4,11 @@ import pandas as pd
 import re
 import yaml
 
-from csv_tagger import CsvProcessor
+from csv_tagger import CsvProcessor, DataType
 
 
-def process_tags_and_summary(config):
-    output_csv_path=os.path.join(config["folders"]["csv_mail"], config['folders']['mail_filename'])
+def process_tags_and_summary(config, data_type):
+    output_csv_path=os.path.join(config["folders"]["csv_"+data_type], config['folders'][data_type+'_filename'])
     predicted_path = os.path.join(config["folders"]["ai_rct"], config["folders"]["predictions_filename"])
     INN_path = os.path.join(config["folders"]["ai_rct"], config["folders"]["INN_filename"])
     
@@ -64,17 +64,20 @@ def launch_llm_processing():
     print("=" * 50)
     with open('config.yml', 'r', encoding='utf-8') as file:
         config = yaml.safe_load(file)
-    processor = CsvProcessor(
-        model=config["llm_model"],
-        output_csv_path=os.path.join(config["folders"]["csv_mail"], config['folders']['mail_filename']),
-        batch_size=50,
-        mail=True,
-        config_path='config.yml'
-    )
 
-    print("\nStarting CSV tagging process...")
-    processor.process()
-    process_tags_and_summary(config)
+    for data_type in [DataType.MAIL, DataType.CALLS]:
+        print("Processing " + data_type.value + " file...")
+        processor = CsvProcessor(
+            model=config["llm_model"],
+            output_csv_path=os.path.join(config["folders"]["csv_"+data_type.value], config["folders"][data_type.value+"_filename"]),
+            batch_size=50,
+            data_type=data_type,
+            config_path='config.yml'
+        )
+
+        print("\nStarting CSV tagging process...")
+        processor.process()
+        process_tags_and_summary(config, data_type.value)
 
     print(f"\n Processing finished!")
     print(f" Results saved")
