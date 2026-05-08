@@ -304,6 +304,8 @@ class CsvProcessor:
 
             df.to_csv(self.output_csv_path, index=False)
             print(f"Батч {i // self.batch_size + 1} обработан и сохранен.")
+            print(df.columns)
+            print(len(df))
 
         print("Обработка завершена.")
 
