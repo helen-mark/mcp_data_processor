@@ -24,8 +24,8 @@ class CsvProcessor:
         with open(config_path, 'r', encoding='utf-8') as file:
             config = yaml.safe_load(file)
         self.model = model  #'opt/models/openai-gpt-oss-120b/'
-        self.vllm_port = 8000
-        self.vllm_process = None
+        self.vllm_port = 8000  # CURRENTLY UNUSED
+        self.vllm_process = None  # CURRENTLY UNUSED
         self.startup_timeout = 1000
         #self._start_vllm_server()
 
@@ -43,6 +43,7 @@ class CsvProcessor:
         #)
         self.processed_files = set()
 
+    # CURRENTLY UNUSED
     def _detect_dtype(self):
         config_path = os.path.join(self.model, "config.json")
         if os.path.exists(config_path):
@@ -63,6 +64,7 @@ class CsvProcessor:
                 print(f"Warning: Could not detect quantization: {e}")
         return None  # Let vLLM auto-detect
 
+    # CURRENTLY UNUSED
     def _detect_quantization(self):
         config_path = os.path.join(self.model, "config.json")
         if os.path.exists(config_path):
@@ -80,6 +82,7 @@ class CsvProcessor:
                         return "float16"
         return "bfloat16"  # Default to bfloat16 for safety
 
+    # CURRENTLY UNUSED
     def _start_vllm_server(self, gpu_memory_util: float = 0.9, max_model_len: int = 4096):
         print(f"\n{'='*60}")
         print(f"Starting vLLM server")
@@ -200,7 +203,7 @@ class CsvProcessor:
         self.log_thread = threading.Thread(target=capture_logs, daemon=True)
         self.log_thread.start()
 
-
+    # CURRENTLY UNUSED
     def _wait_for_server(self, max_retries=400, retry_delay=2):
         print("Waiting for vLLM server to start...")
 
@@ -225,6 +228,7 @@ class CsvProcessor:
         print("vLLM server failed to start within timeout")
         return False
 
+    # CURRENTLY UNUSED
     def _cleanup_server(self):
         if self.vllm_process:
             print("\n Shutting down vLLM server...")
