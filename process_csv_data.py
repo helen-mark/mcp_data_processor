@@ -13,7 +13,7 @@ def process_tags_and_summary(config, data_type):
     INN_path = os.path.join(config["folders"]["ai_rct"], config["folders"]["INN_filename"])
     
     predicted_list = pd.read_excel(predicted_path)
-    predicted_list = predicted_list[predicted_list["Risk"]==1]["INN"]
+    predicted_list = predicted_list[predicted_list["Risk"]>=1]["INN"]
     
     INNs = pd.read_excel(INN_path)
     predicted_INNs = INNs[INNs["ИНН"].isin(predicted_list)]
@@ -52,12 +52,10 @@ def process_tags_and_summary(config, data_type):
                 tags_list.append('клиент возмущен')
         return str(tags_list)
 
+
     df = pd.read_csv(output_csv_path).dropna(subset=['tags', 'summary'])
-    print('df before additional tagging:')
-    print(len(df))
     df['tags'] = df.apply(add_ai_rct_tag, axis=1)
     df['tags'] = df.apply(add_outrage_tag, axis=1)
-    print(len(df))
     df.to_csv(output_csv_path)
     return
 

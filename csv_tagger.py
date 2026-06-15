@@ -258,6 +258,7 @@ class CsvProcessor:
         if 'tags' not in df.columns:
             df['tags'] = None
 
+        print(df.columns)
         mask_empty = ~df['text'].isna() & (df['tags'].isna() | (df['tags'] == ''))
         indices_to_process = df[mask_empty].index.tolist()
 
@@ -471,19 +472,16 @@ class CsvProcessor:
             json_match = re.search(r'\{.*\}', response_text, re.DOTALL)
             if json_match:
                 result = json.loads(json_match.group())
-
                 valid_selected = []
                 for tag in result.get('result', []):
                     if tag in self.tags_list:
                         valid_selected.append(tag)
                     else:
                         print(f"Модель придумала тег '{tag}', игнорирую")
-
-                valid_selected.append(DataType.value)
-
+                valid_selected.append(self.data_type.value)
+                print(valid_selected)
 
                 result['result'] = valid_selected
-
                 return result
             else:
                 raise ValueError("LLM не вернула JSON")

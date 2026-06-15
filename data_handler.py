@@ -43,16 +43,17 @@ def merge_files():
         axis=1
     )
     mail = mail[~mail['text'].isin(mail_tagged['text'])].copy()
-    print("MAIL LEN", len(mail))
     for col in cols_to_add:
         mail[col] = None
         calls[col] = None
 
     mail = pd.concat([mail, mail_tagged], ignore_index=True)
+    mail = mail.drop_duplicates(subset=['text'], keep='first')
     print("CONCAT LEN", len(mail))
     calls_tagged = pd.read_csv(os.path.join(csv_calls_path, calls_filename))
     calls = calls[~calls['text'].isin(calls_tagged['text'])].copy()
     calls = pd.concat([calls, calls_tagged], ignore_index=True)
+    calls['date_str'] = calls['date'].astype(str)
 
     mail.to_csv(os.path.join(csv_mail_path, mail_filename))
     calls.to_csv(os.path.join(csv_calls_path, calls_filename))
