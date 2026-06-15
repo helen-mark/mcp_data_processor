@@ -250,7 +250,7 @@ class CsvProcessor:
             print(f"Ошибка тегирования: {e}")
             return {'result': [], 'summary': f'Ошибка: {str(e)}'}
 
-    def process(self, input_csv_path: Optional[str] = None) -> None:
+    def process(self, add_tags: bool = False, input_csv_path: Optional[str] = None) -> None:
         csv_path = input_csv_path if input_csv_path else self.output_csv_path
 
         df = pd.read_csv(csv_path)
@@ -258,9 +258,8 @@ class CsvProcessor:
         if 'tags' not in df.columns:
             df['tags'] = None
 
-        print(df.columns)
         mask_empty = ~df['text'].isna() & (df['tags'].isna() | (df['tags'] == ''))
-        indices_to_process = df[mask_empty].index.tolist()
+        indices_to_process = df.index.tolist() if add_tags else df[mask_empty].index.tolist()
 
         if not indices_to_process:
             print("Все строки уже имеют теги.")
@@ -280,14 +279,20 @@ class CsvProcessor:
                     df.at[idx, 'tags'] = '[]'
                     df.at[idx, 'summary'] = 'нет'
                     continue
+
                 print(text[:200])
+
                 try:
-                    result = self._run_tagging_locally(text)
+                    result = self.get_single_tag_from_llm(text) if add_tags else self._run_tagging_locally(text)
 
                     if 'result' in result:
-                        tags = result['result']
+                        if add_tags:
+                            tags_str = df.at[idx, 'tags'].replace("'", '"')
+                            tags = result['result'] + json.loads(tags_str)
+                        else:
+                            tags = result['result']
                         df.at[idx, 'tags'] = str(tags)
-                    else:
+                    elif not add_tags:
                         df.at[idx, 'tags'] = '[]'
                     if 'summary' in result:
                         s = result['summary']
@@ -298,7 +303,8 @@ class CsvProcessor:
 
                 except Exception as e:
                     print(f"Ошибка обработки индекса {idx}: {e}")
-                    df.at[idx, 'tags'] = '[]'
+                    if not add_tags:
+                        df.at[idx, 'tags'] = '[]'
                     df.at[idx, 'summary'] = 'нет'
 
                 time.sleep(0.1)
@@ -310,6 +316,98 @@ class CsvProcessor:
 
         print("Обработка завершена.")
 
+    def get_single_tag_from_llm(self, text: str) -> Dict[str, Any]:
+            truncated_text = text[:3000] + "..." if len(text) > 3000 else text
+
+            prompt = f"""Ты — специалист по категоризации транскрибированных телефонных разговоров и писем электронной почты.
+    Есть записи телефонных разговоров менеджеров с клиентами, которые берут в аренду грязезащитные ковры и получают услуги по их доставке (замене) и чистке.
+
+    Вот текст одного разговора или письма:
+    {truncated_text}
+
+    ТВОЕ ЗАДАНИЕ: определи, есть ли в этом тексте жалоба клиента на конкретного менеджера, а именно: либо упоминание фамилии или имени менеджера и выражение недовольства,
+    либо упоминание конкретного менеджера без названия его имени, например: "наш менеджер совершенно некомпетентен..." или: Этот менеджер, с которым мы регулярно общаемся,
+    постоянно не отвечает на письма..." или: "тот оператор, который занимается нами, в прошлый раз мне нагрубил...". То есть ты ищешь не просто описание безликой проблемы,
+    а прямое указание на исполнителя.
+
+    ВЕРНИ ОТВЕТ ТОЛЬКО В ФОРМАТЕ JSON:
+    {{
+      "result": ["жалоба на менеджера"]
+    }}
+    
+    ЛИБО, если прямого указания на менеджера с описанием проблемы не найдено в тексте, то список должен быть пустым:
+    {{
+      "result": []
+    }}
+    """
+
+            empty_response = {
+                "result": [],
+                "summary": '',
+                "additional_tags": [],
+                "reasoning": "Ошибка"
+            }
+
+            try:
+                if len(truncated_text) < 30:
+                    print('Text is too short')
+                    return empty_response
+                # if self.is_local:
+                #     response = self.model(prompt_mail if self.mail else prompt,
+                #                           temperature=0.3,
+                #                           top_p=0.9,
+                #                           # num_gpu=-1,
+                #                           num_ctx=4096)
+                # else:
+                print('Getting response ...')
+                response = self.client.generate(
+                    model=self.model,
+                    prompt=prompt,
+                    keep_alive=-1,
+                    options={
+                        'temperature': 0.3,
+                        'top_p': 0.9,
+                        # "num_gpu": -1,
+                        'num_ctx': 4096
+                    }
+                )
+                # response = self.client.chat.completions.create(
+                # model=self.model,
+                # messages=[
+                # {"role": "user", "content": prompt_mail if self.mail else prompt}
+                # ],
+                # temperature=0.3,
+                # top_p=0.9,
+                # max_tokens=512,
+                # )
+
+                # response_text = response.choices[0].message.content
+
+                response_text = response['response']
+                print('response + ctx8: ', response_text)
+                # token_count = response['prompt_eval_count']
+                # print(f"Real n tokens in prompt: {token_count}")
+
+                json_match = re.search(r'\{.*\}', response_text, re.DOTALL)
+                if json_match:
+                    result = json.loads(json_match.group())
+                    valid_selected = []
+                    for tag in result.get('result', []):
+                        if tag in self.tags_list:
+                            valid_selected.append(tag)
+                        else:
+                            print(f"Модель придумала тег '{tag}', игнорирую")
+                    valid_selected.append(self.data_type.value)
+                    print(valid_selected)
+
+                    result['result'] = valid_selected
+                    return result
+                else:
+                    raise ValueError("LLM не вернула JSON")
+
+            except Exception as e:
+                print(f"Ошибка при запросе к LLM: {e}")
+                return empty_response
 
     def get_tags_from_llm(self, text: str) -> Dict[str, Any]:
         truncated_text = text[:3000] + "..." if len(text) > 3000 else text
