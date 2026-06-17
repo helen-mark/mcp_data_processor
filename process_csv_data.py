@@ -76,7 +76,7 @@ def launch_llm_processing():
         )
 
         print("\nStarting CSV tagging process...")
-        processor.process()
+        processor.process(add_tags=False)
         process_tags_and_summary(config, data_type.value)
 
     print(f"\n Processing finished!")
