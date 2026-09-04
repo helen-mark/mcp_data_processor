@@ -257,30 +257,39 @@ class CsvProcessor:
 
         if 'tags' not in df.columns:
             df['tags'] = None
+        if 'summary' not in df.columns:
+            df['summary'] = None
+        if 'processed' not in df.columns:
+            df['processed'] = False
 
-        mask_empty = ~df['text'].isna() & (df['tags'].isna() | (df['tags'] == ''))
-        indices_to_process = df.index.tolist() if add_tags else df[mask_empty].index.tolist()
+        if add_tags:
+            indices_to_process = df.index.tolist()
+        else:
+            mask_process = ~df['processed'].astype(bool) & ~df['text'].isna()
+            indices_to_process = df[mask_process].index.tolist()
 
         if not indices_to_process:
-            print("Все строки уже имеют теги.")
+            print("Все строки уже обработаны.")
             return
 
-        print(f"Найдено {len(indices_to_process)} строк без тегов.")
+        print(f"Найдено {len(indices_to_process)} строк для обработки.")
 
         for i in range(0, len(indices_to_process), self.batch_size):
             batch_indices = indices_to_process[i:i + self.batch_size]
-            batch_df = df.loc[batch_indices]
 
             print(f"Обработка батча {i // self.batch_size + 1}, размер: {len(batch_indices)}")
 
             for idx in batch_indices:
                 text = df.loc[idx, 'text']
-                if pd.isna(text) or text == '':
+
+                if pd.isna(text) or text == '' or len(str(text).strip()) < 30:
                     df.at[idx, 'tags'] = '[]'
                     df.at[idx, 'summary'] = 'нет'
+                    df.at[idx, 'processed'] = True
+                    print(f"Строка {idx}: текст слишком короткий, помечаем как обработанный")
                     continue
 
-                print(text[:200])
+                print(f"Обработка текста (индекс {idx}): {str(text)[:200]}...")
 
                 try:
                     result = self.get_single_tag_from_llm(text) if add_tags else self._run_tagging_locally(text)
@@ -294,28 +303,28 @@ class CsvProcessor:
                         df.at[idx, 'tags'] = str(tags)
                     elif not add_tags:
                         df.at[idx, 'tags'] = '[]'
+
                     if 'summary' in result:
-                        s = result['summary']
-                        df.at[idx, 'summary'] = str(s)
+                        df.at[idx, 'summary'] = str(result['summary'])
                     elif not add_tags:
                         df.at[idx, 'summary'] = 'нет'
 
+                    df.at[idx, 'processed'] = True
+
                     print(f"Final tags: {df.at[idx, 'tags']}")
                     print(f"Final summary: {df.at[idx, 'summary']}")
-
 
                 except Exception as e:
                     print(f"Ошибка обработки индекса {idx}: {e}")
                     if not add_tags:
                         df.at[idx, 'tags'] = '[]'
                     df.at[idx, 'summary'] = 'нет'
+                    df.at[idx, 'processed'] = True
 
                 time.sleep(0.1)
 
             df.to_csv(self.output_csv_path, index=False)
             print(f"Батч {i // self.batch_size + 1} обработан и сохранен.")
-            print(df.columns)
-            print(len(df))
 
         print("Обработка завершена.")
 
